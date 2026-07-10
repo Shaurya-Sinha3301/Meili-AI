@@ -1,0 +1,7 @@
+-r base.txt
+celery[redis]>=5.3,<6
+kombu>=5.3,<6
+redis[asyncio]
+groq
+google-generativeai
+ortools

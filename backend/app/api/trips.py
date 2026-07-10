@@ -232,7 +232,7 @@ class PreferenceUpdateRequest(BaseModel):
 # Endpoints
 # ============================================================================
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, verify_trip_access
 from app.schemas.auth import TokenPayload
 
 @router.post("/initialize", response_model=InitializeTripResponse, status_code=status.HTTP_201_CREATED)
@@ -356,7 +356,7 @@ async def initialize_trip_with_optimization(
 
 
 @router.get("/{trip_id}/summary", response_model=TripDetailResponse)
-async def get_trip_summary(trip_id: str):
+async def get_trip_summary(trip_id: str, _: Any = Depends(verify_trip_access)):
     """
     Get detailed summary of a trip including current state.
     
@@ -388,7 +388,7 @@ async def get_trip_summary(trip_id: str):
 
 
 @router.get("/{trip_id}/itinerary")
-async def get_trip_itinerary(trip_id: str):
+async def get_trip_itinerary(trip_id: str, _: Any = Depends(verify_trip_access)):
     """
     Get the full latest optimized itinerary for a trip.
     Reads the actual JSON file specified in the TripSession.
@@ -437,7 +437,8 @@ async def get_trip_itinerary(trip_id: str):
 async def update_family_preferences(
     trip_id: str,
     family_id: str,
-    request: PreferenceUpdateRequest
+    request: PreferenceUpdateRequest,
+    _: Any = Depends(verify_trip_access)
 ):
     """
     Update preferences for a specific family.
@@ -598,7 +599,7 @@ async def list_trips(
 
 
 @router.delete("/{trip_id}")
-async def delete_trip(trip_id: str):
+async def delete_trip(trip_id: str, _: Any = Depends(verify_trip_access)):
     """
     Archive a trip (soft delete).
 

@@ -292,7 +292,8 @@ class OptimizerService:
     def process_feedback_with_agents(
         trip_id: str,
         family_id: str,
-        message: str
+        message: str,
+        simulate: bool = False
     ) -> Dict[str, Any]:
         """
         Process user feedback through the explainability pipeline.
@@ -367,7 +368,7 @@ class OptimizerService:
             parsed_constraints = processor.parse_user_feedback(message, available_pois)
 
             # --- 3. Update Preferences in DB ---
-            if family_uuid and (parsed_constraints.get("add") or parsed_constraints.get("remove")):
+            if not simulate and family_uuid and (parsed_constraints.get("add") or parsed_constraints.get("remove")):
                 for poi_id in parsed_constraints.get("add", []):
                     name = next((n for lid, n in available_pois if lid == poi_id), poi_id)
                     PreferenceService.add_preference(family_uuid, poi_id, name, PreferenceType.MUST_VISIT, reason=message)
@@ -401,9 +402,12 @@ class OptimizerService:
 
             # --- 5. Save New Itinerary to DB ---
             if optimization_ran and new_itinerary:
-                new_itin_record = ItineraryService.create_version(family_uuid, new_itinerary)
-                new_itinerary_id = new_itin_record.id
-                trip_session.iteration_count += 1
+                if not simulate:
+                    new_itin_record = ItineraryService.create_version(family_uuid, new_itinerary)
+                    new_itinerary_id = new_itin_record.id
+                    trip_session.iteration_count += 1
+                else:
+                    new_itinerary_id = prev_itinerary_id # Mock ID for simulation
             else:
                 new_itinerary = old_itinerary # No change
 
@@ -420,7 +424,7 @@ class OptimizerService:
             llm_sentences = [e.get("llm_explanation", "") for e in explanations_list if e.get("llm_explanation")]
 
             # --- 7. Save Explanations to DB ---
-            if explanations_list and family_uuid and new_itinerary_id:
+            if not simulate and explanations_list and family_uuid and new_itinerary_id:
                 ExplanationService.save_explanations(
                     trip_id=trip_id,
                     family_id=family_uuid,
@@ -433,16 +437,17 @@ class OptimizerService:
             itinerary_updated = optimization_ran and bool(result.get("diffs"))
 
             # --- 8. Update trip session feedback history ---
-            trip_session.feedback_history.append({
-                "iteration": trip_session.iteration_count,
-                "timestamp": datetime.utcnow().isoformat(),
-                "family_id": family_id,
-                "message": message,
-                "event_type": "EXPLAINABILITY_PROCESSED",
-                "action": "PIPELINE_COMPLETE" if explanations_list else "NO_CHANGES_DETECTED",
-                "explanations_count": len(explanations_list),
-            })
-            OptimizerService.update_trip_session(trip_session)
+            if not simulate:
+                trip_session.feedback_history.append({
+                    "iteration": trip_session.iteration_count,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "family_id": family_id,
+                    "message": message,
+                    "event_type": "EXPLAINABILITY_PROCESSED",
+                    "action": "PIPELINE_COMPLETE" if explanations_list else "NO_CHANGES_DETECTED",
+                    "explanations_count": len(explanations_list),
+                })
+                OptimizerService.update_trip_session(trip_session)
 
             return {
                 "success": True,
@@ -461,15 +466,16 @@ class OptimizerService:
             logger.error("FeedbackProcessor pipeline error: %s", e, exc_info=True)
 
         # --- Fallback: just record the feedback message ---
-        trip_session.feedback_history.append({
-            "iteration": trip_session.iteration_count,
-            "timestamp": datetime.utcnow().isoformat(),
-            "family_id": family_id,
-            "message": message,
-            "event_type": "ACKNOWLEDGED",
-            "action": "FALLBACK_MODE",
-        })
-        OptimizerService.update_trip_session(trip_session)
+        if not simulate:
+            trip_session.feedback_history.append({
+                "iteration": trip_session.iteration_count,
+                "timestamp": datetime.utcnow().isoformat(),
+                "family_id": family_id,
+                "message": message,
+                "event_type": "ACKNOWLEDGED",
+                "action": "FALLBACK_MODE",
+            })
+            OptimizerService.update_trip_session(trip_session)
 
         return {
             "success": True,

@@ -72,3 +72,35 @@ async def get_optional_user(token: str = Depends(OAuth2PasswordBearer(tokenUrl=f
         return TokenPayload(**payload)
     except ValidationError:
         return None
+
+def get_agent_runtime():
+    from app.agent_runtime import AgentRuntime
+    return AgentRuntime()
+
+def get_agent_workflow_service(runtime = Depends(get_agent_runtime)):
+    from app.services.agent_workflow_service import AgentWorkflowService
+    return AgentWorkflowService(runtime=runtime)
+
+async def verify_trip_access(
+    trip_id: str,
+    current_user: Annotated[TokenPayload, Depends(get_current_user)]
+):
+    """
+    Verify that the current user belongs to a family associated with the requested trip.
+    """
+    from app.services.trip_service import TripService
+    
+    if current_user.role == "agent":
+        return TripService.get_trip(trip_id)  # Agents have global access
+        
+    if not current_user.family_id:
+        raise HTTPException(status_code=403, detail="User not associated with a family")
+        
+    trip_session = TripService.get_trip(trip_id)
+    if not trip_session:
+        raise HTTPException(status_code=404, detail="Trip not found")
+        
+    if current_user.family_id not in trip_session.family_ids:
+        raise HTTPException(status_code=403, detail="Access denied: Family not part of this trip")
+        
+    return trip_session

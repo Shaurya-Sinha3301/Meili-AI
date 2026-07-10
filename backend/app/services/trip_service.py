@@ -858,3 +858,44 @@ class TripService:
             "status": "archived",
             "message": f"Trip {trip_id} has been archived",
         }
+
+    @staticmethod
+    def update_trip_itinerary(
+        trip_id: str,
+        itinerary_id,
+        iteration_count_increment: bool = False,
+    ) -> Optional[TripSession]:
+        """
+        Update the TripSession to point to a new current itinerary (DB-based).
+        
+        Args:
+            trip_id: Trip identifier string
+            itinerary_id: UUID of the new current Itinerary record
+            iteration_count_increment: If True, increment iteration_count
+        
+        Returns:
+            Updated TripSession, or None if not found
+        """
+        from sqlmodel import select
+        import uuid as uuid_mod
+
+        with get_db_session() as session:
+            stmt = select(TripSession).where(TripSession.trip_id == trip_id)
+            trip = session.exec(stmt).first()
+            
+            if not trip:
+                logger.warning(f"Trip not found for itinerary update: {trip_id}")
+                return None
+            
+            trip.current_itinerary_id = itinerary_id if isinstance(itinerary_id, uuid_mod.UUID) else uuid_mod.UUID(str(itinerary_id))
+            trip.last_optimization_at = datetime.utcnow()
+            trip.updated_at = datetime.utcnow()
+            
+            if iteration_count_increment:
+                trip.iteration_count = (trip.iteration_count or 0) + 1
+            
+            session.add(trip)
+            # session commits on __exit__ of get_db_session context manager
+        
+        logger.info(f"Updated trip {trip_id} -> itinerary {itinerary_id} (iteration {trip.iteration_count})")
+        return trip
