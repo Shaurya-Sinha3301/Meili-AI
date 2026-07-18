@@ -1,0 +1,1 @@
+export const ApprovalCard = (props: Record<string, unknown>) => <div>Placeholder</div>;

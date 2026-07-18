@@ -1,0 +1,1 @@
+export const JobProgressCard = (props: Record<string, unknown>) => <div>Placeholder</div>;

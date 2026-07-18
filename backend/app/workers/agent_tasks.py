@@ -127,6 +127,25 @@ def execute_agent_job_task(self, job_id_str: str):
         # Handle Result
         if result.success:
             AgentJobService.complete_job(job_id, result_payload=result.result)
+            
+            # Publish to Redis for WebSocket real-time updates
+            try:
+                import redis
+                from app.core.config import settings
+                import json
+                r = redis.from_url(settings.REDIS_URL)
+                notification = {
+                    "type": "JOB_COMPLETED",
+                    "job_id": str(job_id),
+                    "trip_id": job.trip_id,
+                    "agent_id": str(job.created_by_user_id) if job.created_by_user_id else None
+                }
+                # Publish to both channels to ensure appropriate dashboards update
+                r.publish("booking_notifications", json.dumps(notification))
+                r.publish("traveller_notifications", json.dumps(notification))
+            except Exception as pub_err:
+                logger.error(f"Failed to publish to redis: {pub_err}")
+                
             return result.result
         else:
             # Check for retryability based on error name

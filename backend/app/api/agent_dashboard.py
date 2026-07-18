@@ -230,6 +230,46 @@ async def approve_itinerary_option(
         )
 
 
+class AgentJobListResponse(BaseModel):
+    jobs: List[AgentJobStatusResponse]
+
+@router.get("/jobs", response_model=AgentJobListResponse)
+async def list_agent_jobs(
+    limit: int = 50,
+    offset: int = 0,
+    current_agent: TokenPayload = Depends(get_current_agent)
+) -> Any:
+    """
+    List all agent jobs (for agent dashboard).
+    """
+    try:
+        from sqlmodel import Session, select
+        from app.core.db import engine
+        from app.models.agent_job import AgentJob
+        
+        with Session(engine) as session:
+            stmt = select(AgentJob).order_by(AgentJob.created_at.desc()).offset(offset).limit(limit)
+            jobs = session.exec(stmt).all()
+            
+            return AgentJobListResponse(
+                jobs=[
+                    AgentJobStatusResponse(
+                        job_id=str(j.id),
+                        status=j.status.value,
+                        result=j.result_payload,
+                        error=j.error_message,
+                        created_at=j.created_at,
+                        updated_at=j.updated_at,
+                        started_at=j.started_at,
+                        completed_at=j.completed_at
+                    ) for j in jobs
+                ]
+            )
+    except Exception as e:
+        logger.error(f"Failed to list jobs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list jobs: {str(e)}")
+
+
 @router.get("/jobs/{job_id}", response_model=AgentJobStatusResponse)
 async def get_agent_job_status(
     job_id: str,
